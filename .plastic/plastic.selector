@@ -1,0 +1,4 @@
+repository "fishing@tj_gainsborough1412@cloud.cn"
+  path "/"
+    br "/main"
+    co "/main"

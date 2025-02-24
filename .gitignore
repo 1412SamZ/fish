@@ -1,0 +1,19 @@
+# 忽略编译输出目录
+/bin/
+/obj/
+
+# 忽略 Unity 相关的临时文件和目录
+/Temp/
+/Logs/
+/Library/
+
+# 忽略 Visual Studio 或 Rider 生成的配置文件
+*.suo
+*.user
+*.userprefs
+*.sln.docstates
+
+# 忽略操作系统生成的文件
+.DS_Store
+Thumbs.db
+
