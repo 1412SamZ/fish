@@ -3,6 +3,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using DG.Tweening;
 using System.Collections.Generic;
+// 新增命名空间引用
+using UnityEngine.EventSystems; 
 
 // 类别数据类
 public class CategoryData
@@ -21,6 +23,8 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
     public Button exitPanelButton; // 新增退出按钮
     public GameObject inventoryItemPrefab;
     public Vector2 subPanelPosition;
+    public Button prevPageButton;
+    public Button nextPageButton;
 
     // 序列化字段，在 Inspector 面板中手动指定鱼类相关对象
     [SerializeField] private Button fishButton;
@@ -34,8 +38,17 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
     [SerializeField] private Transform landscapeListContent;
     [SerializeField] private ScrollRect landscapeScrollRect; // 新增景观 ScrollRect 字段
 
+    // 新增：用于显示选定鱼的列表
+    public Transform selectedFishList;
+    public GameObject selectedFishItemPrefab;
+
     private GameObject currentPanel;
     private List<CategoryData> categoryDataList = new List<CategoryData>();
+    private int currentPage = 0;
+    private int itemsPerPage = 8; // 4 行 2 列
+
+    // 新增：存储选定的鱼
+    private List<InventoryItemData> selectedFish = new List<InventoryItemData>();
 
     void Start()
     {
@@ -68,12 +81,16 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
         fishScrollRect.GetComponent<RectTransform>().sizeDelta = new Vector2(twoColumnWidth, fourRowHeight);
         landscapeScrollRect.GetComponent<RectTransform>().sizeDelta = new Vector2(twoColumnWidth, fourRowHeight);
     
-        // 禁用水平滚动
+        // 禁用水平和垂直滚动
         fishScrollRect.horizontal = false;
+        fishScrollRect.vertical = false;
         landscapeScrollRect.horizontal = false;
+        landscapeScrollRect.vertical = false;
     
         inventoryButton.onClick.AddListener(ShowInventoryPanel);
         exitPanelButton.onClick.AddListener(HideInventoryPanel);
+        prevPageButton.onClick.AddListener(PreviousPage);
+        nextPageButton.onClick.AddListener(NextPage);
     
         // 为每个类别按钮添加点击事件
         foreach (var categoryData in categoryDataList)
@@ -81,6 +98,8 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
             categoryData.categoryButton.onClick.AddListener(() => SwitchPanel(categoryData.categoryPanel));
             AddItemsToList(categoryData.listContent, categoryData.itemDataList, categoryData.scrollRect); // 修改方法调用
         }
+    
+        ShowPage(currentPage);
     }
 
     void InitializeCategoryData()
@@ -91,7 +110,7 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
             Debug.LogError("鱼类类别数据相关对象未在 Inspector 面板中指定，请检查！");
             return;
         }
-
+    
         CategoryData fishCategory = new CategoryData
         {
             categoryButton = fishButton,
@@ -100,7 +119,7 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
             itemDataList = new List<InventoryItemData>(),
             scrollRect = fishScrollRect // 赋值 ScrollRect
         };
-
+    
         for (int i = 1; i <= 12; i++)
         {
             fishCategory.itemDataList.Add(new InventoryItemData
@@ -110,16 +129,16 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
                 Description = $"This is fish {i}"
             });
         }
-
+    
         categoryDataList.Add(fishCategory);
-
+    
         // 景观类别数据
         if (landscapeButton == null || landscapePanel == null || landscapeListContent == null || landscapeScrollRect == null)
         {
             Debug.LogError("景观类别数据相关对象未在 Inspector 面板中指定，请检查！");
             return;
         }
-
+    
         CategoryData landscapeCategory = new CategoryData
         {
             categoryButton = landscapeButton,
@@ -128,7 +147,7 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
             itemDataList = new List<InventoryItemData>(),
             scrollRect = landscapeScrollRect // 赋值 ScrollRect
         };
-
+    
         for (int i = 1; i <= 12; i++)
         {
             landscapeCategory.itemDataList.Add(new InventoryItemData
@@ -138,12 +157,11 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
                 Description = $"This is landscape {i}"
             });
         }
-
+    
         categoryDataList.Add(landscapeCategory);
-
+    
         // 可以在这里添加更多类别数据
     }
-
     void AddItemsToList(Transform content, List<InventoryItemData> dataList, ScrollRect scrollRect)
     {
         if (content == null)
@@ -219,42 +237,52 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
             }
             descriptionText.text = data.Description;
     
-            // 计算两列的宽度
-            float twoColumnWidth = 2 * itemWidth + spacing;
-            // 计算四行的高度
-            float fourRowHeight = 4 * (itemHeight + spacing);
+            // 隐藏所有物品，后续根据页码显示
+            item.SetActive(false);
     
-            // 调整 Content 的大小为 2 列 4 行
-            RectTransform contentRect = content.GetComponent<RectTransform>();
-            contentRect.sizeDelta = new Vector2(twoColumnWidth, fourRowHeight);
-    
-            // 设置 Content 的锚点和轴心点
-            contentRect.anchorMin = new Vector2(0, 1);
-            contentRect.anchorMax = new Vector2(0, 1);
-            contentRect.pivot = new Vector2(0, 1);
-            contentRect.anchoredPosition = Vector2.zero;
-    
-            if (viewportRect != null)
+            // 新增：使用 EventTrigger 添加点击事件
+            EventTrigger eventTrigger = item.GetComponent<EventTrigger>();
+            if (eventTrigger == null)
             {
-                // 禁用可能影响布局的组件
-                ContentSizeFitter contentSizeFitter = viewportRect.GetComponent<ContentSizeFitter>();
-                if (contentSizeFitter != null)
-                {
-                    contentSizeFitter.enabled = false;
-                }
-    
-                // 设置视口的宽度为两列宽，高度为四行高
-                viewportRect.sizeDelta = new Vector2(twoColumnWidth, fourRowHeight);
-    
-                // 设置 Viewport 的锚点和轴心点
-                viewportRect.anchorMin = new Vector2(0, 1);
-                viewportRect.anchorMax = new Vector2(0, 1);
-                viewportRect.pivot = new Vector2(0, 1);
-                viewportRect.anchoredPosition = Vector2.zero;
-    
-                // 滚动到顶部
-                scrollRect.verticalNormalizedPosition = 1f;
+                eventTrigger = item.AddComponent<EventTrigger>();
             }
+    
+            EventTrigger.Entry entry = new EventTrigger.Entry();
+            entry.eventID = EventTriggerType.PointerClick;
+            entry.callback.AddListener((eventData) => SelectFish(data));
+            eventTrigger.triggers.Add(entry);
+        }
+    
+        // 调整 Content 的大小为 2 列 4 行
+        RectTransform contentRect = content.GetComponent<RectTransform>();
+        contentRect.sizeDelta = new Vector2(2 * itemWidth + spacing, 4 * (itemHeight + spacing));
+    
+        // 设置 Content 的锚点和轴心点
+        contentRect.anchorMin = new Vector2(0, 1);
+        contentRect.anchorMax = new Vector2(0, 1);
+        contentRect.pivot = new Vector2(0, 1);
+        contentRect.anchoredPosition = Vector2.zero;
+    
+        if (viewportRect != null)
+        {
+            // 禁用可能影响布局的组件
+            ContentSizeFitter contentSizeFitter = viewportRect.GetComponent<ContentSizeFitter>();
+            if (contentSizeFitter != null)
+            {
+                contentSizeFitter.enabled = false;
+            }
+    
+            // 设置视口的宽度为两列宽，高度为四行高
+            viewportRect.sizeDelta = new Vector2(2 * itemWidth + spacing, 4 * (itemHeight + spacing));
+    
+            // 设置 Viewport 的锚点和轴心点
+            viewportRect.anchorMin = new Vector2(0, 1);
+            viewportRect.anchorMax = new Vector2(0, 1);
+            viewportRect.pivot = new Vector2(0, 1);
+            viewportRect.anchoredPosition = Vector2.zero;
+    
+            // 滚动到顶部
+            scrollRect.verticalNormalizedPosition = 1f;
         }
     }
     void ShowInventoryPanel()
@@ -263,7 +291,6 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
         inventoryPanel.GetComponent<CanvasGroup>().alpha = 0;
         inventoryPanel.GetComponent<CanvasGroup>().DOFade(1, 0.3f).SetEase(Ease.OutQuad);
     }
-
     void SwitchPanel(GameObject targetPanel)
     {
         if (currentPanel != null)
@@ -281,7 +308,6 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
             ShowTargetPanel(targetPanel);
         }
     }
-
     void ShowTargetPanel(GameObject targetPanel)
     {
         targetPanel.SetActive(true);
@@ -293,10 +319,10 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
             // 动画完成后再次确认位置
             targetPanel.GetComponent<RectTransform>().anchoredPosition = subPanelPosition;
         });
-
-        currentPanel = targetPanel;
+    currentPanel = targetPanel;
+    currentPage = 0;
+    ShowPage(currentPage);
     }
-
     void HideInventoryPanel()
     {
         Debug.Log("点击了退出按钮，尝试隐藏 inventoryPanel");
@@ -318,5 +344,78 @@ public class InventoryCategoryHandlerWithDoTween : MonoBehaviour
         {
             Debug.Log("inventoryPanel 未激活，无需隐藏");
         }
+    }
+    void ShowPage(int page)
+    {
+        // 从当前激活的 CategoryData 中获取 ScrollRect 的 Content
+        foreach (var categoryData in categoryDataList)
+        {
+            if (categoryData.categoryPanel == currentPanel)
+            {
+                Transform content = categoryData.scrollRect.content;
+                for (int i = 0; i < content.childCount; i++)
+                {
+                    bool isVisible = i >= page * itemsPerPage && i < (page + 1) * itemsPerPage;
+                    content.GetChild(i).gameObject.SetActive(isVisible);
+                }
+                break;
+            }
+        }
+    }
+    void PreviousPage()
+    {
+        if (currentPage > 0)
+        {
+            currentPage--;
+            ShowPage(currentPage);
+        }
+    }
+    void NextPage()
+    {
+        // 从当前激活的 CategoryData 中获取 ScrollRect 的 Content
+        foreach (var categoryData in categoryDataList)
+        {
+            if (categoryData.categoryPanel == currentPanel)
+            {
+                Transform content = categoryData.scrollRect.content;
+                int totalPages = Mathf.CeilToInt((float)content.childCount / itemsPerPage);
+                if (currentPage < totalPages - 1)
+                {
+                    currentPage++;
+                    ShowPage(currentPage);
+                }
+                break;
+            }
+        }
+    }
+    // 新增：选择鱼的方法
+    void SelectFish(InventoryItemData fish)
+    {
+        Debug.Log($"尝试选择鱼: {fish.Name}");
+        if (!selectedFish.Contains(fish))
+        {
+            selectedFish.Add(fish);
+            Debug.Log($"成功选择鱼: {fish.Name}，当前选中鱼的数量: {selectedFish.Count}");
+            UpdateSelectedFishList();
+        }
+    }
+    // 新增：更新选定鱼的列表
+    void UpdateSelectedFishList()
+    {
+        // 清空现有列表
+        foreach (Transform child in selectedFishList)
+        {
+            Destroy(child.gameObject);
+        }
+    // 添加新的选定鱼
+    foreach (InventoryItemData fish in selectedFish)
+    {
+        GameObject item = Instantiate(selectedFishItemPrefab, selectedFishList);
+        TextMeshProUGUI nameText = item.GetComponentInChildren<TextMeshProUGUI>();
+        if (nameText != null)
+        {
+            nameText.text = fish.Name;
+        }
+    }
     }
 }

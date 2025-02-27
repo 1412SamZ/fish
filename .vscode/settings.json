@@ -56,7 +56,7 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "fishing.sln",
+    "dotnet.defaultSolution": "fish.sln",
     "marscode.chatLanguage": "cn",
     "marscode.codeCompletionPro": {
         "enableCodeCompletionPro": true
